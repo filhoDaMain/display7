@@ -26,7 +26,8 @@ $ make prepare
 
 Compile the sources of this repo
 ```
-# If not done before or changed shells
+# If not done before or changed shell
+$ source /path/to/sdk/environment-setup
 
 $ export KERNEL_SRC=/path/to/sdk/sysroots/cortexa7/usr/src/kernel
 $ make
