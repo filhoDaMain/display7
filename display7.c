@@ -25,19 +25,19 @@
 // Example of a valid configuration:
 //
 //  seven_segment_displays {
-// 	    compatible = "filhodamain,display7";
+//      compatible = "filhodamain,display7";
 //
-// 	    display7_1 {
-// 		    label = "display7:user:1";
-// 		    disp1-gpios = <&gpio 15 0>,	/* segment A */
-// 					      <&gpio 14 0>,	/* segment B */
-// 					      <&gpio 8 0>,	/* segment C */
-// 					      <&gpio 25 0>,	/* segment D */
-// 					      <&gpio 24 0>,	/* segment E */
-// 					      <&gpio 18 0>,	/* segment F */
-// 					      <&gpio 23 0>,	/* segment G */
-// 					      <&gpio 7 0>;	/* DP */
-// 	    };
+//      display7_1 {
+//          label = "display7:user:1";
+//          disp1-gpios = <&gpio 15 0>,	/* segment A */
+//                        <&gpio 14 0>,	/* segment B */
+//                        <&gpio 8 0>,	/* segment C */
+//                        <&gpio 25 0>,	/* segment D */
+//                        <&gpio 24 0>,	/* segment E */
+//                        <&gpio 18 0>,	/* segment F */
+//                        <&gpio 23 0>,	/* segment G */
+//                        <&gpio 7 0>;	/* DP */
+//      };
 //  };
 //
 
@@ -137,7 +137,7 @@ static ssize_t digit_show(struct device *dev,
 
 // User space interface for "write" callbacks to special file
 static ssize_t digit_store(struct device *dev,
-		struct device_attribute *attr, const char *buf, size_t size)
+        struct device_attribute *attr, const char *buf, size_t size)
 {
     char digit = *buf;
 
@@ -217,21 +217,21 @@ static int display7_probe(struct platform_device *pdev)
     display7_class = class_create(THIS_MODULE, SYSCLASS_NAME);
     if (IS_ERR(display7_class))
     {
-		result = PTR_ERR(display7_class);
-		goto ret_err_class_create;
-	}
+        result = PTR_ERR(display7_class);
+        goto ret_err_class_create;
+    }
 
     // Create a device inside /sys/class/display7/
     sysfs_display7_device = device_create( display7_class, NULL,     /* no parent device */ 
-		                    display7_data->devnum, NULL,    /* no additional data */
-		                    DISPLAY_DEVICE_NAME );
+                            display7_data->devnum, NULL,    /* no additional data */
+                            DISPLAY_DEVICE_NAME );
 
     if (IS_ERR(sysfs_display7_device))
     {
-		result = PTR_ERR(sysfs_display7_device);
+        result = PTR_ERR(sysfs_display7_device);
         dev_err(parent_device, "Failed to create a device file!");
-		goto ret_err_create_device;
-	}
+        goto ret_err_create_device;
+    }
 
     // Add subfile to directory entry.
     // Echo'ing and cat'ting this file will call *_store() and *_show()
