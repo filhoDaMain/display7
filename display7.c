@@ -50,6 +50,7 @@
 #include <linux/gpio/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/of_gpio.h>
+#include <linux/fs.h>
 
 
 #define DRIVER_NAME             "display7"
@@ -121,7 +122,7 @@ static void display7_setled(unsigned int digit)
                                     display7_data->descs->info,
                                     &digit_segments);
 
-    if (IS_ERR(result))
+    if (IS_ERR_VALUE(result))
     {
         dev_err(parent_device, "Error setting a value in GPIOS: %d", result);
     }
@@ -197,7 +198,7 @@ static int display7_probe(struct platform_device *pdev)
     display7_data->descs = gpiod_get_array(child_device, "disp1", GPIOD_OUT_LOW);
     if (IS_ERR(display7_data->descs))
     {
-        dev_err(parent_device, "Error getting array og GPIOS: %d", display7_data->descs);
+        dev_err(parent_device, "Error getting array of GPIOS disp1");
         return (int) display7_data->descs;
     }
 
@@ -214,7 +215,7 @@ static int display7_probe(struct platform_device *pdev)
     }
 
     // Create a class of devices to appear in /sys/class/
-    display7_class = class_create(THIS_MODULE, SYSCLASS_NAME);
+    display7_class = class_create(SYSCLASS_NAME);
     if (IS_ERR(display7_class))
     {
         result = PTR_ERR(display7_class);
@@ -237,7 +238,7 @@ static int display7_probe(struct platform_device *pdev)
     // Echo'ing and cat'ting this file will call *_store() and *_show()
     // functions respectively.
     result = device_create_file(sysfs_display7_device, &dev_attr_digit);
-    if (IS_ERR(result))
+    if (IS_ERR_VALUE(result))
     {
         dev_err(parent_device, "Failed to create a device sub-file!");
         goto ret_err_create_device_subfile;
@@ -258,7 +259,7 @@ ret_ok:
     return result;
 }
 
-static int display7_remove(struct platform_device *pdev)
+static void display7_remove(struct platform_device *pdev)
 {
     device_remove_file(sysfs_display7_device, &dev_attr_digit);
     device_destroy(display7_class, display7_data->devnum);
@@ -266,7 +267,7 @@ static int display7_remove(struct platform_device *pdev)
     unregister_chrdev_region(display7_data->devnum, 1);
     gpiod_put_array(display7_data->descs);
     dev_info(&pdev->dev, "Driver unloaded!");
-    return 0;
+    return;
 }
 
 static const struct of_device_id of_display7_match[] = {
@@ -285,7 +286,6 @@ static struct platform_driver display7_driver = {
 };
 
 module_platform_driver(display7_driver);
-
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Andre Temprilho (filhoDaMain)");
 MODULE_VERSION("1.0");
