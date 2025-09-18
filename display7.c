@@ -1,47 +1,3 @@
-//
-// Usage:
-// * Write to display:
-//  echo <value> > /sys/class/display7/<display-name>/digit
-//
-// * Read displayed value:
-// cat /sys/class/display7/<display-name>/digit
-//
-// <display-name> comes from device-tree 
-//
-//
-// Parses device tree to setup GPIOS to drive the display (see NOTE below).
-// Uses a custom user-space framework to drive the LED display to show
-// a character between 0 and F.
-//
-// Framework:
-// * Creates a new /sys/class (display7).
-// * Creates a subdevice for a dislpay within this class.
-//
-//
-// NOTE: 
-// The driver expects one device tree subnode per each display with
-// mandatory 'label' and 'gpios' properties defined.
-//
-// Example of a valid configuration:
-//
-//  seven_segment_displays {
-//      compatible = "filhodamain,display7";
-//
-//      display7_1 {
-//          label = "display7:user:1";
-//          disp1-gpios = <&gpio 15 0>,	/* segment A */
-//                        <&gpio 14 0>,	/* segment B */
-//                        <&gpio 8 0>,	/* segment C */
-//                        <&gpio 25 0>,	/* segment D */
-//                        <&gpio 24 0>,	/* segment E */
-//                        <&gpio 18 0>,	/* segment F */
-//                        <&gpio 23 0>,	/* segment G */
-//                        <&gpio 7 0>;	/* DP */
-//      };
-//  };
-//
-
-
 #include <linux/module.h>
 #include <linux/kernel.h>
 #include <linux/slab.h>
@@ -50,11 +6,12 @@
 #include <linux/gpio/consumer.h>
 #include <linux/platform_device.h>
 #include <linux/of_gpio.h>
+#include <linux/fs.h>
 
 
 #define DRIVER_NAME             "display7"
 #define SYSCLASS_NAME           "display7"
-#define DISPLAY_DEVICE_NAME     "user:1"
+#define DT_DEVICE_LABEL         "label"
 
 struct display7_data_st {
     dev_t devnum;
@@ -68,11 +25,11 @@ static struct device *parent_device = NULL;
 
 // User-space interface:
 // ----------------------------------------------
-// A class to appear in /sys/class/
+// /sys/class/display7
 static struct class * display7_class = NULL;
 
-// An "object / instance" of class display7_class
-static struct device * sysfs_display7_device = NULL;
+// /sys/class/display7/device
+static struct device * display7_device = NULL;
 // ----------------------------------------------
 
 // Segments:
@@ -121,7 +78,7 @@ static void display7_setled(unsigned int digit)
                                     display7_data->descs->info,
                                     &digit_segments);
 
-    if (IS_ERR(result))
+    if (IS_ERR_VALUE(result))
     {
         dev_err(parent_device, "Error setting a value in GPIOS: %d", result);
     }
@@ -132,7 +89,7 @@ static ssize_t digit_show(struct device *dev,
             struct device_attribute *attr, char *buf)
 {
     *buf = display7_data->digit;
-    return 0;
+    return sizeof(*buf);
 }
 
 // User space interface for "write" callbacks to special file
@@ -167,7 +124,7 @@ static ssize_t digit_store(struct device *dev,
     return size;
 }
 
-// Delcares 'dev_attr_digit' of type 'struct device_attribute'.
+// Declares 'dev_attr_digit' of type 'struct device_attribute'.
 // Fills the store/show callbacks with 'digit_store()', 'digit_show()'.
 static DEVICE_ATTR_RW(digit);
 
@@ -197,7 +154,7 @@ static int display7_probe(struct platform_device *pdev)
     display7_data->descs = gpiod_get_array(child_device, "disp1", GPIOD_OUT_LOW);
     if (IS_ERR(display7_data->descs))
     {
-        dev_err(parent_device, "Error getting array og GPIOS: %d", display7_data->descs);
+        dev_err(parent_device, "Error getting array of GPIOS disp1");
         return (int) display7_data->descs;
     }
 
@@ -214,7 +171,7 @@ static int display7_probe(struct platform_device *pdev)
     }
 
     // Create a class of devices to appear in /sys/class/
-    display7_class = class_create(THIS_MODULE, SYSCLASS_NAME);
+    display7_class = class_create(SYSCLASS_NAME);
     if (IS_ERR(display7_class))
     {
         result = PTR_ERR(display7_class);
@@ -222,13 +179,20 @@ static int display7_probe(struct platform_device *pdev)
     }
 
     // Create a device inside /sys/class/display7/
-    sysfs_display7_device = device_create( display7_class, NULL,     /* no parent device */ 
-                            display7_data->devnum, NULL,    /* no additional data */
-                            DISPLAY_DEVICE_NAME );
-
-    if (IS_ERR(sysfs_display7_device))
+    const char *device_name = NULL;
+    if (0 != of_property_read_string(child, DT_DEVICE_LABEL, &device_name))
     {
-        result = PTR_ERR(sysfs_display7_device);
+        dev_err(parent_device,"DT node does not contain label property");
+        goto ret_err_create_device;
+    }
+
+    display7_device = device_create( display7_class, NULL,     /* no parent device */
+                            display7_data->devnum, NULL,    /* no additional data */
+                            device_name );
+
+    if (IS_ERR(display7_device))
+    {
+        result = PTR_ERR(display7_device);
         dev_err(parent_device, "Failed to create a device file!");
         goto ret_err_create_device;
     }
@@ -236,8 +200,8 @@ static int display7_probe(struct platform_device *pdev)
     // Add subfile to directory entry.
     // Echo'ing and cat'ting this file will call *_store() and *_show()
     // functions respectively.
-    result = device_create_file(sysfs_display7_device, &dev_attr_digit);
-    if (IS_ERR(result))
+    result = device_create_file(display7_device, &dev_attr_digit);
+    if (IS_ERR_VALUE(result))
     {
         dev_err(parent_device, "Failed to create a device sub-file!");
         goto ret_err_create_device_subfile;
@@ -258,15 +222,15 @@ ret_ok:
     return result;
 }
 
-static int display7_remove(struct platform_device *pdev)
+static void display7_remove(struct platform_device *pdev)
 {
-    device_remove_file(sysfs_display7_device, &dev_attr_digit);
+    device_remove_file(display7_device, &dev_attr_digit);
     device_destroy(display7_class, display7_data->devnum);
     class_destroy(display7_class);
     unregister_chrdev_region(display7_data->devnum, 1);
     gpiod_put_array(display7_data->descs);
     dev_info(&pdev->dev, "Driver unloaded!");
-    return 0;
+    return;
 }
 
 static const struct of_device_id of_display7_match[] = {
@@ -285,7 +249,6 @@ static struct platform_driver display7_driver = {
 };
 
 module_platform_driver(display7_driver);
-
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("Andre Temprilho (filhoDaMain)");
-MODULE_VERSION("1.0");
+MODULE_VERSION("1.1");
